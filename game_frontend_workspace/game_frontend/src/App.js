@@ -32,7 +32,22 @@ function App() {
     const WORLD_SIZE = 4;  // Only 4x4 chunks (was 8x8)
     const BLOCK_SIZE = 3;
     // Only draw terrain/objects near player (basic frustum culling cutoff)
-    const RENDER_DIST_BLOCKS = CHUNK_SIZE * 2.1 * BLOCK_SIZE;
+    // --- Adjusted for farther airplane start:
+    // Compute the aircraft's starting X: -LANDSCAPE_HALF - 104
+    // Landscape corners: from -LANDSCAPE_HALF to +LANDSCAPE_HALF on X,Z.
+    // Max distance = from airplane's start to farthest corner (diagonally away)
+    // That distance = sqrt((startX - far_corner_x)^2 + (0 - far_corner_z)^2)
+    //   far_corner_x = +LANDSCAPE_HALF, far_corner_z = LANDSCAPE_HALF
+    //   startX = -LANDSCAPE_HALF - twiceBuffer
+    // So, total delta X: (LANDSCAPE_HALF) - (-LANDSCAPE_HALF - twiceBuffer) = 2 * LANDSCAPE_HALF + twiceBuffer
+    // Delta Z: LANDSCAPE_HALF
+    // RENDER_DIST_BLOCKS should be at least sqrt((2*LANDSCAPE_HALF+twiceBuffer)^2 + (LANDSCAPE_HALF)^2)
+    const maxChunkSpan = CHUNK_SIZE * WORLD_SIZE * BLOCK_SIZE / 2;
+    const farthestDist = Math.sqrt(
+      Math.pow(maxChunkSpan + maxChunkSpan + 104, 2) +
+      Math.pow(maxChunkSpan, 2)
+    ); // maximum corner-to-corner distance + starting offset
+    const RENDER_DIST_BLOCKS = farthestDist + 60; // buffer for safety
 
 
     // ---- BATCHED TERRAIN with InstancedMeshes ----
@@ -274,11 +289,12 @@ function App() {
       mountRef.current.appendChild(renderer.domElement);
 
       scene = new THREE.Scene();
+      // Use visibility distance for camera far plane (was 2400)
       camera = new THREE.PerspectiveCamera(
         72,
         window.innerWidth / window.innerHeight,
         0.1,
-        2400
+        RENDER_DIST_BLOCKS + 320 // add buffer for tall clouds etc.
       );
 
       // Lighting
