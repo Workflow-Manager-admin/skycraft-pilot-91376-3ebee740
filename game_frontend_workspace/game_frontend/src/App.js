@@ -323,8 +323,21 @@ function App() {
       // Position airplane well outside landscape bounds, aiming toward the center
       // Landscape spans from (-WORLD_SIZE*CHUNK_SIZE/2 * BLOCK_SIZE) to (WORLD_SIZE*CHUNK_SIZE/2 * BLOCK_SIZE)
       // Let's put the airplane along -X (left), at Y=32 above landscape, at center Z, facing positive X (toward terrain)
+      // UPDATED: Airplane now starts at double the distance from the edge for a longer approach.
       const LANDSCAPE_HALF = (WORLD_SIZE * CHUNK_SIZE * BLOCK_SIZE) / 2; // e.g., 4*12*3/2=72
-      const airplaneStartX = -LANDSCAPE_HALF - 52; // 52 units farther left of edge for a clear approach
+
+      // The current formula was:
+      //   airplaneStartX = -LANDSCAPE_HALF - 52
+      // To double the "distance from the closest edge," calculate the distance from edge as:
+      //   distanceFromEdge = LANDSCAPE_HALF + 52;
+      // The new spawn should be at:
+      //   newAirplaneStartX = -LANDSCAPE_HALF - 2 * (LANDSCAPE_HALF + 52 - LANDSCAPE_HALF)
+      // Or simply, -LANDSCAPE_HALF - 2*(52) → i.e., 52 units was the former buffer, now use 104.
+      // But make sure: if more general, the original edge is at -LANDSCAPE_HALF, buffer=distance beyond edge.
+
+      const originalBuffer = 52;
+      const twiceBuffer = 2 * originalBuffer;
+      const airplaneStartX = -LANDSCAPE_HALF - twiceBuffer; // Now 104 units from the edge
       const airplaneStartY = 32; // A bit above expected landscape height
       const airplaneStartZ = 0;
       airplanePivot.position.set(airplaneStartX, airplaneStartY, airplaneStartZ);
