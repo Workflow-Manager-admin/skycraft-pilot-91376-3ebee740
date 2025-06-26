@@ -210,21 +210,34 @@ function App() {
       }
 
       // --- Populate VOXEL TREES efficiently ---
-      const totalTrees = 250 + Math.round(Math.random() * 200);
+      // Reduce tree count to around 40 for cleaner rendering
+      const totalTrees = 36 + Math.round(Math.random() * 8); // Between 36 and 44 trees
       const possiblePlacements = Object.keys(groundHeights);
-      for (let i = 0; i < totalTrees; i++) {
-        // Sample a surface location, skip near origin (runway zone)
+
+      // Use a Set to prevent duplicate placements
+      const usedPositions = new Set();
+      let attempts = 0;
+      let created = 0;
+      while (created < totalTrees && attempts < totalTrees * 8) {
         let k, px, pz;
         let tryCount = 0;
         do {
           k = possiblePlacements[Math.floor(Math.random() * possiblePlacements.length)];
-          [px, pz] = k.split(',').map(Number);
+          [px, pz] = k.split(",").map(Number);
           tryCount++;
         } while (
-          Math.abs(px - (WORLD_SIZE * CHUNK_SIZE)/2) < 15 &&
-          Math.abs(pz - (WORLD_SIZE * CHUNK_SIZE)/2) < 15 &&
-          tryCount < 15
+          (Math.abs(px - (WORLD_SIZE * CHUNK_SIZE)/2) < 15 &&
+           Math.abs(pz - (WORLD_SIZE * CHUNK_SIZE)/2) < 15
+          ) && tryCount < 15
         );
+
+        // Avoid duplicate placement
+        if (usedPositions.has(k)) {
+          attempts++;
+          continue;
+        }
+        usedPositions.add(k);
+
         const height = groundHeights[k];
         // Jitter coordinates for more natural placement
         const wx = (px - (WORLD_SIZE * CHUNK_SIZE)/2) * BLOCK_SIZE + (Math.random()-0.5)*BLOCK_SIZE*0.7;
@@ -232,6 +245,8 @@ function App() {
         const wz = (pz - (WORLD_SIZE * CHUNK_SIZE)/2) * BLOCK_SIZE + (Math.random()-0.5)*BLOCK_SIZE*0.7;
         const treeObj = createVoxelTree(THREE, {x: wx, y: wy, z: wz});
         scene.add(treeObj);
+        created++;
+        attempts++;
       }
 
       // --- Place Buildings (sparser) ---
