@@ -320,8 +320,18 @@ function App() {
       airplanePivot = new THREE.Group();
       airplane = createBlockyAirplane(THREE);
       airplanePivot.add(airplane);
-      airplanePivot.position.set(0, 30, 0);
+      // Position airplane well outside landscape bounds, aiming toward the center
+      // Landscape spans from (-WORLD_SIZE*CHUNK_SIZE/2 * BLOCK_SIZE) to (WORLD_SIZE*CHUNK_SIZE/2 * BLOCK_SIZE)
+      // Let's put the airplane along -X (left), at Y=32 above landscape, at center Z, facing positive X (toward terrain)
+      const LANDSCAPE_HALF = (WORLD_SIZE * CHUNK_SIZE * BLOCK_SIZE) / 2; // e.g., 4*12*3/2=72
+      const airplaneStartX = -LANDSCAPE_HALF - 52; // 52 units farther left of edge for a clear approach
+      const airplaneStartY = 32; // A bit above expected landscape height
+      const airplaneStartZ = 0;
+      airplanePivot.position.set(airplaneStartX, airplaneStartY, airplaneStartZ);
+      // Orientation: face toward the center (positive X direction), so yaw=0, pitch=0, roll=0 is OK
+      // If needed, can adjust slightly for diagonal approach by yawing toward (0,0,0)
       airplanePivot.rotation.order = "YXZ";
+      airplanePivot.rotation.set(0, 0, 0); // Ensure forward along X toward center
       scene.add(airplanePivot);
 
       // Clouds (reference groups for culling)
