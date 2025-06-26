@@ -24,46 +24,147 @@ function App() {
     const PITCH_RATE = 0.013;        // Pitch change
     const ROLL_RATE = 0.022;         // How quickly the airplane rolls
 
-    // Minecraft-style blocky world parameters
-    const CHUNK_SIZE = 16;
-    const WORLD_SIZE = 3; // 3x3 "chunks" loaded
+    // Minecraft-style world expansion parameters (LARGER!)
+    const CHUNK_SIZE = 18; // Was 16, now larger
+    const WORLD_SIZE = 8; // Was 3, now 8x8 = 64 chunks for a vast world
 
-    // Utility: Generate "blocky" ground using perlin-like noise (simple heights)
-    function generateChunk(chunkX, chunkZ) {
+    // Block size - increase for chunkier look, decrease for finer
+    const BLOCK_SIZE = 3;
+
+    // Utility: Generate "blocky" ground using simple noise (heightmap)
+    // Collect block top positions for object placement
+    function generateChunk(chunkX, chunkZ, groundHeights) {
       const group = new THREE.Group();
-      const blockSize = 3;
       for (let x = 0; x < CHUNK_SIZE; x++) {
         for (let z = 0; z < CHUNK_SIZE; z++) {
-          // Simple noise: deterministic "height"
+          // Absolute world coords
           const absX = chunkX * CHUNK_SIZE + x;
           const absZ = chunkZ * CHUNK_SIZE + z;
-          // Toy height: sand/grass/dirt hills
+          // Height: wavy hills (pseudo-noise)
           const height =
             Math.floor(
               2 +
                 Math.abs(
-                  Math.sin((absX) * 0.23) +
-                  Math.cos((absZ) * 0.17) +
-                  Math.sin((absX + absZ) * 0.13)
-                ) * 3
+                  Math.sin(absX * 0.22) +
+                  Math.cos(absZ * 0.19) +
+                  0.42 * Math.sin((absX + absZ) * 0.11)
+                ) * 3.3
             );
+          // Record for object-plopping on surface
+          if (groundHeights) {
+            groundHeights[`${absX},${absZ}`] = height;
+          }
 
+          // Add stacked cubes bottom-up for terrain
           for (let y = 0; y <= height; y++) {
             let color =
               y === 0
                 ? 0x888888 // stone
                 : y === height
-                ? 0x228B22 // grass
-                : 0xd2b48c; // sand/dirt
-            const geometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+                ? 0x44ac39 // grass (brighter)
+                : 0xd7bb86; // sand/dirt
+            const geometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
             const material = new THREE.MeshLambertMaterial({ color });
             const cube = new THREE.Mesh(geometry, material);
+            cube.castShadow = false;
+            cube.receiveShadow = true;
             cube.position.set(
-              (absX - (WORLD_SIZE * CHUNK_SIZE) / 2) * blockSize,
-              y * blockSize - 24,
-              (absZ - (WORLD_SIZE * CHUNK_SIZE) / 2) * blockSize
+              (absX - (WORLD_SIZE * CHUNK_SIZE) / 2) * BLOCK_SIZE,
+              y * BLOCK_SIZE - 28,
+              (absZ - (WORLD_SIZE * CHUNK_SIZE) / 2) * BLOCK_SIZE
             );
             group.add(cube);
+          }
+        }
+      }
+      return group;
+    }
+
+    // Generate a simple voxel tree (trunk and leaves)
+    function createVoxelTree(THREE, pos) {
+      const group = new THREE.Group();
+
+      // Trunk: 2 cubes
+      const trunkHeight = 2 + Math.floor(Math.random() * 2); // 2-3 cubes
+      for (let y = 0; y < trunkHeight; y++) {
+        const trunkGeo = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        const trunkMat = new THREE.MeshLambertMaterial({ color: 0xa57949 });
+        const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+        trunk.position.set(pos.x, pos.y + y * BLOCK_SIZE, pos.z);
+        group.add(trunk);
+      }
+
+      // Leaves: 2~3 stacked cubes (varied, offset a bit)
+      const leafHeight = 2 + Math.floor(Math.random() * 2);
+      for (let y = 0; y < leafHeight; y++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dz = -1; dz <= 1; dz++) {
+            // Simple sphere-like shape, thinner at top
+            if (Math.abs(dx) + Math.abs(dz) + y < 4) {
+              const leafGeo = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+              const leafMat = new THREE.MeshLambertMaterial({ color: 0x229944 });
+              const leaf = new THREE.Mesh(leafGeo, leafMat);
+              leaf.position.set(
+                pos.x + dx * BLOCK_SIZE,
+                pos.y + trunkHeight * BLOCK_SIZE + y * BLOCK_SIZE,
+                pos.z + dz * BLOCK_SIZE
+              );
+              group.add(leaf);
+            }
+          }
+        }
+      }
+      return group;
+    }
+
+    // Generate a simple blocky building (cube/rectangular, occasional windows/roof)
+    function createVoxelBuilding(THREE, pos, maxFloors = 2 + Math.floor(Math.random()*3)) {
+      const group = new THREE.Group();
+      const width = (2 + Math.floor(Math.random() * 3)) * BLOCK_SIZE;
+      const depth = (2 + Math.floor(Math.random() * 2)) * BLOCK_SIZE;
+      const height = maxFloors * BLOCK_SIZE;
+
+      // Main walls: bright color
+      const wallColors = [0xe67e22, 0xfad02e, 0x4771b2, 0x34db6d, 0xdc5e65];
+      const wallMat = new THREE.MeshLambertMaterial({ color: wallColors[Math.floor(Math.random()*wallColors.length)] });
+
+      const wall = new THREE.Mesh(
+        new THREE.BoxGeometry(width, height, depth),
+        wallMat
+      );
+      wall.position.set(pos.x, pos.y + height / 2, pos.z);
+      group.add(wall);
+
+      // Simple "roof" slab (slightly larger)
+      const roofMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+      const roof = new THREE.Mesh(
+        new THREE.BoxGeometry(width + BLOCK_SIZE * 0.35, BLOCK_SIZE * 0.85, depth + BLOCK_SIZE * 0.35),
+        roofMat
+      );
+      roof.position.set(pos.x, pos.y + height + (BLOCK_SIZE * 0.425), pos.z);
+      group.add(roof);
+
+      // Windows (optional, as white cubes; only on front/back)
+      if (Math.random() > 0.3) {
+        for (let floor = 1; floor < maxFloors; floor++) {
+          const winHeight = pos.y + floor * BLOCK_SIZE + BLOCK_SIZE/3;
+          for (let i = -1; i <= 1; i++) {
+            if (Math.random() > 0.6) continue;
+            // Front face
+            const winF = new THREE.Mesh(
+              new THREE.BoxGeometry(BLOCK_SIZE * 0.6, BLOCK_SIZE * 0.7, BLOCK_SIZE * 0.2),
+              new THREE.MeshLambertMaterial({ color: 0xeaf4fd, transparent: true, opacity: 0.77 })
+            );
+            winF.position.set(pos.x + i * BLOCK_SIZE, winHeight, pos.z + depth/2 + 0.54);
+            group.add(winF);
+
+            // Back face
+            const winB = new THREE.Mesh(
+              new THREE.BoxGeometry(BLOCK_SIZE * 0.6, BLOCK_SIZE * 0.7, BLOCK_SIZE * 0.2),
+              new THREE.MeshLambertMaterial({ color: 0xeaf4fd, transparent: true, opacity: 0.77 })
+            );
+            winB.position.set(pos.x + i * BLOCK_SIZE, winHeight, pos.z - depth/2 - 0.54);
+            group.add(winB);
           }
         }
       }
@@ -89,37 +190,89 @@ function App() {
         5000
       );
 
-      // Minecraft-style light, sun and ambient
-      scene.add(new THREE.AmbientLight(0xffffff, 0.80));
-      const sun = new THREE.DirectionalLight(0xffe094, 1.0);
-      sun.position.set(-230, 340, 200);
+      // Minecraft-style light (ambient & sun)
+      scene.add(new THREE.AmbientLight(0xffffff, 0.82));
+      const sun = new THREE.DirectionalLight(0xffe094, 1.04);
+      sun.position.set(-320, 340, 420);
       scene.add(sun);
 
-      // WORLD: create a few chunks
+      // --- WORLD BUILDING ---
+      // Generate block heights for later tree/building placement
+      let groundHeights = {};
+
+      // Chunks: much larger grid
       for (let cx = 0; cx < WORLD_SIZE; cx++) {
         for (let cz = 0; cz < WORLD_SIZE; cz++) {
-          const chunk = generateChunk(cx, cz);
+          const chunk = generateChunk(cx, cz, groundHeights);
           scene.add(chunk);
           worldChunks.push(chunk);
         }
       }
 
-      // Airplane model: blocky, but semi-aerodynamic
+      // --- Populate VOXEL TREES efficiently ---
+      const totalTrees = 250 + Math.round(Math.random() * 200);
+      const possiblePlacements = Object.keys(groundHeights);
+      for (let i = 0; i < totalTrees; i++) {
+        // Sample a surface location, skip near origin (runway zone)
+        let k, px, pz;
+        let tryCount = 0;
+        do {
+          k = possiblePlacements[Math.floor(Math.random() * possiblePlacements.length)];
+          [px, pz] = k.split(',').map(Number);
+          tryCount++;
+        } while (
+          Math.abs(px - (WORLD_SIZE * CHUNK_SIZE)/2) < 15 &&
+          Math.abs(pz - (WORLD_SIZE * CHUNK_SIZE)/2) < 15 &&
+          tryCount < 15
+        );
+        const height = groundHeights[k];
+        // Jitter coordinates for more natural placement
+        const wx = (px - (WORLD_SIZE * CHUNK_SIZE)/2) * BLOCK_SIZE + (Math.random()-0.5)*BLOCK_SIZE*0.7;
+        const wy = height * BLOCK_SIZE - 28 + 0.01;
+        const wz = (pz - (WORLD_SIZE * CHUNK_SIZE)/2) * BLOCK_SIZE + (Math.random()-0.5)*BLOCK_SIZE*0.7;
+        const treeObj = createVoxelTree(THREE, {x: wx, y: wy, z: wz});
+        scene.add(treeObj);
+      }
+
+      // --- Place Buildings (sparser) ---
+      const totalBuildings = 12 + Math.floor(Math.random() * 6);
+      for (let i = 0; i < totalBuildings; i++) {
+        // Farther apart from origin (so player can "find" them)
+        let k, px, pz, attempts = 0;
+        do {
+          k = possiblePlacements[Math.floor(Math.random() * possiblePlacements.length)];
+          [px, pz] = k.split(',').map(Number);
+          attempts++;
+        } while (
+          Math.abs(px - (WORLD_SIZE * CHUNK_SIZE)/2) < 20 &&
+          Math.abs(pz - (WORLD_SIZE * CHUNK_SIZE)/2) < 20 &&
+          attempts < 30
+        );
+        const height = groundHeights[k];
+        // Slight jitter for not-perfect rectangles
+        const wx = (px - (WORLD_SIZE * CHUNK_SIZE)/2) * BLOCK_SIZE + (Math.random()-0.5)*BLOCK_SIZE*0.8;
+        const wy = height * BLOCK_SIZE - 28 + 0.01;
+        const wz = (pz - (WORLD_SIZE * CHUNK_SIZE)/2) * BLOCK_SIZE + (Math.random()-0.5)*BLOCK_SIZE*0.8;
+        const bldg = createVoxelBuilding(THREE, {x: wx, y: wy, z: wz});
+        scene.add(bldg);
+      }
+
+      // --- Airplane model: blocky, but semi-aerodynamic ---
       airplanePivot = new THREE.Group();
       airplane = createBlockyAirplane(THREE);
       airplanePivot.add(airplane);
-      // Start above world
-      airplanePivot.position.set(0, 28, 0);
+      // Start above world, in middle-ish
+      airplanePivot.position.set(0, 36, 0);
       airplanePivot.rotation.order = "YXZ";
       scene.add(airplanePivot);
 
-      // "Clouds"
-      for (let i = 0; i < 13; i++) {
+      // --- Clouds ---
+      for (let i = 0; i < 18; i++) {
         const mesh = createCloud(
           THREE,
-          -180 + Math.random() * 400,
-          90 + Math.random() * 40,
-          -200 + Math.random() * 400
+          -420 + Math.random() * 900,
+          90 + Math.random() * 110,
+          -420 + Math.random() * 900
         );
         scene.add(mesh);
       }
@@ -129,8 +282,6 @@ function App() {
 
       // Listen for resizing
       window.addEventListener('resize', handleResize, false);
-
-      // Keyboard input
       window.addEventListener('keydown', onKeyDown, false);
       window.addEventListener('keyup', onKeyUp, false);
 
