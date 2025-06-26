@@ -1,0 +1,4 @@
+{
+    "command": "npm install && npx tsc --noEmit && npm test -- --ci",
+    "working_directory": "/home/kavia/workspace/code-generation/skycraft-pilot-91376-3ebee740/game_frontend_workspace/game_frontend"
+}
